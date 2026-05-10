@@ -142,6 +142,32 @@ func (c *Client) GetAllBillingRecords() ([]BillingRecord, error) {
 	return allRecords, nil
 }
 
+func (c *Client) GetAllBillingRecordsRaw() (interface{}, error) {
+	url := c.Config.APIURL + "/account/amount"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Config.APIKey)
+	q := req.URL.Query()
+	q.Add("page", "1")
+	q.Add("limit", "100")
+	q.Add("aggregate", "false")
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return result, nil
+}
+
 func (c *Client) GetSubscriptionDetails() (*SubscriptionDetails, error) {
 	url := c.Config.APIURL + "/v1/api/openplatform/charge/combo/cycle_audio_resource_package"
 	req, err := http.NewRequest("GET", url, nil)

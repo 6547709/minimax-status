@@ -99,6 +99,14 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	stats := client.CalculateUsageStats(records, time.Now().AddDate(0, -1, 0))
 	log.Printf("Got %d billing records, stats: LastDay=%d, Weekly=%d, Monthly=%d", len(records), stats.LastDay, stats.Weekly, stats.Monthly)
 
+	// Debug: log raw billing response
+	rawResp, rawErr := client.GetAllBillingRecordsRaw()
+	if rawErr != nil {
+		log.Printf("Raw billing error: %v", rawErr)
+	} else {
+		log.Printf("Raw billing response: %+v", rawResp)
+	}
+
 	// Get subscription details for expiry date
 	subscription, subErr := client.GetSubscriptionDetails()
 	if subErr != nil {
@@ -109,14 +117,21 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	var expiryDays int
 	if subscription != nil && subscription.CurrentSubscribe.CurrentSubscribeEndTime != "" {
 		expiryDate = subscription.CurrentSubscribe.CurrentSubscribeEndTime
-		expiryTime, _ := time.Parse("2006-01-02 15:04:05", expiryDate)
-		if expiryTime.IsZero() {
-			expiryTime, _ = time.Parse(time.RFC3339, expiryDate)
+		// 尝试多种日期格式
+		formats := []string{"01/02/2006", "2006-01-02", "2006-01-02 15:04:05", time.RFC3339}
+		var expiryTime time.Time
+		for _, format := range formats {
+			expiryTime, _ = time.Parse(format, expiryDate)
+			if !expiryTime.IsZero() {
+				break
+			}
 		}
 		if !expiryTime.IsZero() {
 			expiryDays = int(math.Ceil(time.Until(expiryTime).Hours() / 24))
+			log.Printf("Expiry parsed: date=%s, days=%d", expiryDate, expiryDays)
+		} else {
+			log.Printf("Expiry parse failed for: %s", expiryDate)
 		}
-		log.Printf("Expiry: date=%s, days=%d", expiryDate, expiryDays)
 	}
 
 	// Parse primary model
