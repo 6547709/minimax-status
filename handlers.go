@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"html/template"
+	"log"
 	"math"
 	"net/http"
 	"time"
@@ -91,11 +92,19 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get billing records for stats (all pages)
-	records, _ := client.GetAllBillingRecords()
+	records, err := client.GetAllBillingRecords()
+	if err != nil {
+		log.Printf("Billing records error: %v", err)
+	}
 	stats := client.CalculateUsageStats(records, time.Now().AddDate(0, -1, 0))
+	log.Printf("Got %d billing records, stats: LastDay=%d, Weekly=%d, Monthly=%d", len(records), stats.LastDay, stats.Weekly, stats.Monthly)
 
 	// Get subscription details for expiry date
-	subscription, _ := client.GetSubscriptionDetails()
+	subscription, subErr := client.GetSubscriptionDetails()
+	if subErr != nil {
+		log.Printf("Subscription error: %v", subErr)
+	}
+	log.Printf("Subscription response: %+v", subscription)
 	var expiryDate string
 	var expiryDays int
 	if subscription != nil && subscription.CurrentSubscribe.CurrentSubscribeEndTime != "" {
@@ -107,6 +116,7 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		if !expiryTime.IsZero() {
 			expiryDays = int(math.Ceil(time.Until(expiryTime).Hours() / 24))
 		}
+		log.Printf("Expiry: date=%s, days=%d", expiryDate, expiryDays)
 	}
 
 	// Parse primary model
