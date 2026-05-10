@@ -65,35 +65,6 @@
                 </div>
             </section>
 
-            <section class="section-card">
-                <h2>📋 所有模型额度</h2>
-                <table class="models-table">
-                    <thead>
-                        <tr>
-                            <th>模型</th>
-                            <th>使用率</th>
-                            <th>剩余/总量</th>
-                            <th>状态</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {{range .Models}}
-                        <tr>
-                            <td>{{.Name}}</td>
-                            <td>
-                                <div class="mini-progress">
-                                    <div class="mini-progress-fill" style="width: {{.Percent}}%"></div>
-                                </div>
-                                {{.Percent}}%
-                            </td>
-                            <td>{{.Used}} / {{.Total}}</td>
-                            <td>{{if .Unlimited}}∞{{else}}✓{{end}}</td>
-                        </tr>
-                        {{end}}
-                    </tbody>
-                </table>
-            </section>
-
             <footer class="footer">
                 <span class="status {{if .Status.OK}}status-ok{{else}}status-error{{end}}">
                     {{if .Status.OK}}✅{{else}}❌{{end}} {{.Status.Message}}
