@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MiniMax 使用状态</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>🤖 MiniMax 使用状态</h1>
+            <button class="refresh-btn" onclick="location.reload()">🔄 刷新</button>
+        </header>
+
+        {{if .Error}}
+        <div class="error-card">
+            <p>⚠️ {{.Error}}</p>
+        </div>
+        {{else}}
+        <main class="main-content">
+            <section class="stats-row">
+                <div class="stat-card">
+                    <span class="stat-label">当前模型</span>
+                    <span class="stat-value">{{.ModelName}}</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">剩余重置</span>
+                    <span class="stat-value">{{.ResetTime}}</span>
+                    <span class="stat-sub">{{.TimeWindow}}</span>
+                </div>
+                <div class="stat-card">
+                    <span class="stat-label">套餐到期</span>
+                    <span class="stat-value">{{.ExpiryDays}} 天</span>
+                    <span class="stat-sub">{{.ExpiryDate}}</span>
+                </div>
+            </section>
+
+            <section class="usage-card">
+                <div class="usage-header">
+                    <span class="usage-label">已用额度</span>
+                    <span class="usage-percent">{{.UsagePercent}}%</span>
+                </div>
+                <div class="progress-bar">
+                    <div class="progress-fill" style="width: {{.UsagePercent}}%"></div>
+                </div>
+                <p class="usage-count">{{.UsedCount}} / {{.TotalCount}} 次调用</p>
+            </section>
+
+            <section class="section-card">
+                <h2>📊 Token 消耗统计</h2>
+                <div class="token-stats">
+                    <div class="token-stat">
+                        <span class="token-label">昨日消耗</span>
+                        <span class="token-value">{{.Stats.LastDay}}</span>
+                    </div>
+                    <div class="token-stat">
+                        <span class="token-label">近7天</span>
+                        <span class="token-value">{{.Stats.Weekly}}</span>
+                    </div>
+                    <div class="token-stat">
+                        <span class="token-label">当月</span>
+                        <span class="token-value">{{.Stats.Monthly}}</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="section-card">
+                <h2>📋 所有模型额度</h2>
+                <table class="models-table">
+                    <thead>
+                        <tr>
+                            <th>模型</th>
+                            <th>使用率</th>
+                            <th>剩余/总量</th>
+                            <th>状态</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {{range .Models}}
+                        <tr>
+                            <td>{{.Name}}</td>
+                            <td>
+                                <div class="mini-progress">
+                                    <div class="mini-progress-fill" style="width: {{.Percent}}%"></div>
+                                </div>
+                                {{.Percent}}%
+                            </td>
+                            <td>{{.Used}} / {{.Total}}</td>
+                            <td>{{if .Unlimited}}∞{{else}}✓{{end}}</td>
+                        </tr>
+                        {{end}}
+                    </tbody>
+                </table>
+            </section>
+
+            <footer class="footer">
+                <span class="status {{if .Status.OK}}status-ok{{else}}status-error{{end}}">
+                    {{if .Status.OK}}✅{{else}}❌{{end}} {{.Status.Message}}
+                </span>
+            </footer>
+        </main>
+        {{end}}
+    </div>
+</body>
+</html>
