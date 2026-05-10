@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  minimax-status:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY}
+      - MINIMAX_API_URL=${MINIMAX_API_URL:-https://www.minimaxi.com}
+      - PORT=8080
+    restart: unless-stopped
