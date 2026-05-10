@@ -49,6 +49,12 @@ type UsageStats struct {
 	Monthly   int64
 }
 
+type SubscriptionDetails struct {
+	CurrentSubscribe struct {
+		CurrentSubscribeEndTime string `json:"current_subscribe_end_time"`
+	} `json:"current_subscribe"`
+}
+
 func NewClient(cfg Config) *Client {
 	return &Client{
 		Config: cfg,
@@ -111,6 +117,55 @@ func (c *Client) GetBillingRecords(page, limit int) (*BillingResponse, error) {
 	}
 
 	var result BillingResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+	return &result, nil
+}
+
+func (c *Client) GetAllBillingRecords() ([]BillingRecord, error) {
+	var allRecords []BillingRecord
+	for page := 1; page <= 100; page++ {
+		resp, err := c.GetBillingRecords(page, 100)
+		if err != nil {
+			break
+		}
+		records := resp.ChargeRecords
+		if len(records) == 0 {
+			break
+		}
+		allRecords = append(allRecords, records...)
+		if len(records) < 100 {
+			break
+		}
+	}
+	return allRecords, nil
+}
+
+func (c *Client) GetSubscriptionDetails() (*SubscriptionDetails, error) {
+	url := c.Config.APIURL + "/v1/api/openplatform/charge/combo/cycle_audio_resource_package"
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+c.Config.APIKey)
+	q := req.URL.Query()
+	q.Add("biz_line", "2")
+	q.Add("cycle_type", "1")
+	q.Add("resource_package_type", "7")
+	req.URL.RawQuery = q.Encode()
+
+	resp, err := c.HTTP.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+	}
+
+	var result SubscriptionDetails
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}

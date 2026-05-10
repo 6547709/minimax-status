@@ -90,11 +90,23 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get billing records for stats
-	billing, err := client.GetBillingRecords(1, 100)
-	stats := api.UsageStats{}
-	if err == nil && billing != nil {
-		stats = client.CalculateUsageStats(billing.ChargeRecords, time.Now().AddDate(0, -1, 0))
+	// Get billing records for stats (all pages)
+	records, _ := client.GetAllBillingRecords()
+	stats := client.CalculateUsageStats(records, time.Now().AddDate(0, -1, 0))
+
+	// Get subscription details for expiry date
+	subscription, _ := client.GetSubscriptionDetails()
+	var expiryDate string
+	var expiryDays int
+	if subscription != nil && subscription.CurrentSubscribe.CurrentSubscribeEndTime != "" {
+		expiryDate = subscription.CurrentSubscribe.CurrentSubscribeEndTime
+		expiryTime, _ := time.Parse("2006-01-02 15:04:05", expiryDate)
+		if expiryTime.IsZero() {
+			expiryTime, _ = time.Parse(time.RFC3339, expiryDate)
+		}
+		if !expiryTime.IsZero() {
+			expiryDays = int(math.Ceil(time.Until(expiryTime).Hours() / 24))
+		}
 	}
 
 	// Parse primary model
@@ -124,9 +136,8 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 			pageData.WeeklyLimit = fmt.Sprintf("%d/%d", m.CurrentWeeklyUsageCount, m.CurrentWeeklyTotalCount)
 		}
 
-		// Expiry date (placeholder - would need subscription API)
-		pageData.ExpiryDate = "N/A"
-		pageData.ExpiryDays = 0
+		pageData.ExpiryDate = expiryDate
+		pageData.ExpiryDays = expiryDays
 	}
 
 	// Token stats
