@@ -162,8 +162,3 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 var tmpl = template.Must(template.ParseFiles("templates/index.html"))
-
-func main() {
-	http.HandleFunc("/", homeHandler)
-	http.ListenAndServe(":8080", nil)
-}
