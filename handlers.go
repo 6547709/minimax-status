@@ -81,14 +81,36 @@ func selectPrimaryModel(models []api.ModelRemain) *api.ModelRemain {
 	return nil
 }
 
-func usedPercent(remainingPercent int) int {
-	if remainingPercent <= 0 {
-		return 100
+// usedPercent 把 API 返回的「剩余百分比」转成「已用百分比（相对正常额度）」
+//
+// 关键点：remaining_percent 是基于 boost 后的总额度算的，不是正常额度。
+//
+// 设 N = 正常额度（=1.0），boost 后总额度 = N × boost_permille/1000 = N × B
+// 设 U = 实际已用量（相对正常额度的比例，0~B 之间）
+// 剩余% = (总额度 - U) / 总额度 × 100 = (B - U) / B × 100
+// 反推 U = B × (100 - remaining) / 100
+// 相对于正常额度的已用% = U / 1.0 × 100 = B × (100 - remaining) / 1000
+//
+// 实测：5h (B=2.0, remaining=98) → 2×2/1000 = 4%；weekly (B=3.0, remaining=98) → 3×2/1000 = 6%
+func usedPercent(remainingPercent int, boostPermille int) int {
+	if boostPermille <= 0 {
+		// 没有 boost 信息，回退到朴素算法
+		if remainingPercent <= 0 {
+			return 100
+		}
+		if remainingPercent >= 100 {
+			return 0
+		}
+		return 100 - remainingPercent
 	}
-	if remainingPercent >= 100 {
+	used := boostPermille * (100 - remainingPercent) / 1000
+	if used < 0 {
 		return 0
 	}
-	return 100 - remainingPercent
+	if used > 100 {
+		return 100
+	}
+	return used
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
@@ -127,11 +149,11 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 			startLocal.Hour(), endLocal.Hour())
 		pageData.ResetTime = formatRemainTime(primary.RemainsTime)
 
-		pageData.IntervalUsedPercent = usedPercent(primary.CurrentIntervalRemainingPercent)
-		pageData.IntervalRemainingText = fmt.Sprintf("剩余 %d%%", primary.CurrentIntervalRemainingPercent)
+		pageData.IntervalUsedPercent = usedPercent(primary.CurrentIntervalRemainingPercent, primary.IntervalBoostPermille)
+		pageData.IntervalRemainingText = fmt.Sprintf("剩余 %d%%", 100-pageData.IntervalUsedPercent)
 
-		pageData.WeeklyUsedPercent = usedPercent(primary.CurrentWeeklyRemainingPercent)
-		pageData.WeeklyRemainingText = fmt.Sprintf("剩余 %d%%", primary.CurrentWeeklyRemainingPercent)
+		pageData.WeeklyUsedPercent = usedPercent(primary.CurrentWeeklyRemainingPercent, primary.WeeklyBoostPermille)
+		pageData.WeeklyRemainingText = fmt.Sprintf("剩余 %d%%", 100-pageData.WeeklyUsedPercent)
 		pageData.WeeklyResetText = formatRemainTime(primary.WeeklyRemainsTime)
 	} else {
 		pageData.Error = "API 未返回模型额度信息"
