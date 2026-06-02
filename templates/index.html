@@ -23,46 +23,35 @@
                 <div class="stat-card">
                     <span class="stat-label">当前模型</span>
                     <span class="stat-value">{{.ModelName}}</span>
+                    {{if .ModelSubtitle}}<span class="stat-sub">{{.ModelSubtitle}}</span>{{end}}
                 </div>
                 <div class="stat-card">
-                    <span class="stat-label">剩余重置</span>
+                    <span class="stat-label">5小时重置</span>
                     <span class="stat-value">{{.ResetTime}}</span>
                     <span class="stat-sub">{{.TimeWindow}}</span>
-                </div>
-                <div class="stat-card">
-                    <span class="stat-label">套餐到期</span>
-                    <span class="stat-value">{{.ExpiryDays}} 天</span>
-                    <span class="stat-sub">{{.ExpiryDate}}</span>
                 </div>
             </section>
 
             <section class="usage-card">
                 <div class="usage-header">
-                    <span class="usage-label">已用额度</span>
-                    <span class="usage-percent">{{.UsagePercent}}%</span>
+                    <span class="usage-label">5小时用量</span>
+                    <span class="usage-percent">{{.IntervalUsedPercent}}%</span>
                 </div>
                 <div class="progress-bar">
-                    <div class="progress-fill" style="width: {{.UsagePercent}}%"></div>
+                    <div class="progress-fill" style="width: {{.IntervalUsedPercent}}%"></div>
                 </div>
-                <p class="usage-count">{{.UsedCount}} / {{.TotalCount}} 次调用</p>
+                <p class="usage-count">{{.IntervalRemainingText}}</p>
             </section>
 
-            <section class="section-card">
-                <h2>📊 Token 消耗统计</h2>
-                <div class="token-stats">
-                    <div class="token-stat">
-                        <span class="token-label">昨日消耗</span>
-                        <span class="token-value">{{.Stats.LastDay}}</span>
-                    </div>
-                    <div class="token-stat">
-                        <span class="token-label">近7天</span>
-                        <span class="token-value">{{.Stats.Weekly}}</span>
-                    </div>
-                    <div class="token-stat">
-                        <span class="token-label">当月</span>
-                        <span class="token-value">{{.Stats.Monthly}}</span>
-                    </div>
+            <section class="usage-card">
+                <div class="usage-header">
+                    <span class="usage-label">周用量</span>
+                    <span class="usage-percent">{{.WeeklyUsedPercent}}%</span>
                 </div>
+                <div class="progress-bar">
+                    <div class="progress-fill weekly" style="width: {{.WeeklyUsedPercent}}%"></div>
+                </div>
+                <p class="usage-count">{{.WeeklyRemainingText}} · {{.WeeklyResetText}}后重置</p>
             </section>
 
             <footer class="footer">

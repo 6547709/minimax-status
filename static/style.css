@@ -155,6 +155,10 @@ body {
     transition: width 0.3s ease;
 }
 
+.progress-fill.weekly {
+    background: linear-gradient(90deg, #10b981, #06b6d4);
+}
+
 .usage-count {
     margin-top: 8px;
     font-size: 14px;

@@ -3,57 +3,33 @@ package main
 import (
 	"fmt"
 	"html/template"
-	"log"
-	"math"
 	"net/http"
+	"strings"
 	"time"
 
 	"minimax-status/api"
 )
 
 type PageData struct {
-	ModelName    string
-	TimeWindow   string
-	ResetTime    string
-	UsagePercent int
-	UsedCount    int
-	TotalCount   int
-	WeeklyLimit  string
-	ExpiryDate   string
-	ExpiryDays   int
-	Stats        TokenStats
-	Models       []ModelData
-	Status       StatusInfo
-	Error        string
-}
+	ModelName     string
+	ModelSubtitle string
+	TimeWindow    string
+	ResetTime     string
 
-type TokenStats struct {
-	LastDay  string
-	Weekly   string
-	Monthly  string
-}
+	IntervalUsedPercent   int
+	IntervalRemainingText string
 
-type ModelData struct {
-	Name      string
-	Percent   int
-	Used      int
-	Total     int
-	Unlimited bool
+	WeeklyUsedPercent   int
+	WeeklyRemainingText string
+	WeeklyResetText     string
+
+	Status StatusInfo
+	Error  string
 }
 
 type StatusInfo struct {
 	OK      bool
 	Message string
-}
-
-func formatNumber(n int64) string {
-	if n >= 100000000 {
-		return fmt.Sprintf("%.1f亿", float64(n)/100000000)
-	}
-	if n >= 10000 {
-		return fmt.Sprintf("%.1f万", float64(n)/10000)
-	}
-	return fmt.Sprintf("%d", n)
 }
 
 func formatRemainTime(ms int64) string {
@@ -66,6 +42,53 @@ func formatRemainTime(ms int64) string {
 		return fmt.Sprintf("%d 小时 %d 分钟", hours, mins)
 	}
 	return fmt.Sprintf("%d 分钟", mins)
+}
+
+// mapModelName 把 API 返回的分类名（general/video/...）映射成中文 UI 名
+func mapModelName(name string) (display, subtitle string) {
+	lower := strings.ToLower(name)
+	switch {
+	case lower == "general":
+		return "MiniMax 语言模型", "对话、写作、推理"
+	case lower == "video":
+		return "MiniMax 视频生成", "文生视频/图生视频"
+	case lower == "music":
+		return "MiniMax 音乐生成", "歌曲/纯音乐生成"
+	case lower == "image":
+		return "MiniMax 图像生成", "文生图/图生图"
+	case strings.HasPrefix(lower, "speech"):
+		return "MiniMax 语音", "同步/异步语音合成"
+	case strings.HasPrefix(lower, "MiniMax-m") || strings.HasPrefix(lower, "MiniMax"):
+		return name, ""
+	default:
+		if name == "" {
+			return "未知模型", ""
+		}
+		return name, ""
+	}
+}
+
+// selectPrimaryModel 优先选 "general"（即 MiniMax 语言模型），否则选第一个
+func selectPrimaryModel(models []api.ModelRemain) *api.ModelRemain {
+	for i := range models {
+		if strings.EqualFold(models[i].ModelName, "general") {
+			return &models[i]
+		}
+	}
+	if len(models) > 0 {
+		return &models[0]
+	}
+	return nil
+}
+
+func usedPercent(remainingPercent int) int {
+	if remainingPercent <= 0 {
+		return 100
+	}
+	if remainingPercent >= 100 {
+		return 0
+	}
+	return 100 - remainingPercent
 }
 
 func homeHandler(w http.ResponseWriter, r *http.Request) {
@@ -81,7 +104,6 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 
 	client := api.NewClient(cfg)
 
-	// Get token plan
 	tokenPlan, err := client.GetTokenPlan()
 	if err != nil {
 		data := PageData{
@@ -91,102 +113,28 @@ func homeHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get billing records for stats (all pages)
-	records, err := client.GetAllBillingRecords()
-	if err != nil {
-		log.Printf("Billing records error: %v", err)
-	}
-	stats := client.CalculateUsageStats(records, time.Now().AddDate(0, -1, 0))
-	log.Printf("Got %d billing records, stats: LastDay=%d, Weekly=%d, Monthly=%d", len(records), stats.LastDay, stats.Weekly, stats.Monthly)
+	pageData := PageData{}
 
-	// Debug: log raw billing response
-	rawResp, rawErr := client.GetAllBillingRecordsRaw()
-	if rawErr != nil {
-		log.Printf("Raw billing error: %v", rawErr)
-	} else {
-		log.Printf("Raw billing response: %+v", rawResp)
-	}
+	primary := selectPrimaryModel(tokenPlan.ModelRemains)
+	if primary != nil {
+		display, subtitle := mapModelName(primary.ModelName)
+		pageData.ModelName = display
+		pageData.ModelSubtitle = subtitle
 
-	// Get subscription details for expiry date
-	subscription, subErr := client.GetSubscriptionDetails()
-	if subErr != nil {
-		log.Printf("Subscription error: %v", subErr)
-	}
-	log.Printf("Subscription response: %+v", subscription)
-	var expiryDate string
-	var expiryDays int
-	if subscription != nil && subscription.CurrentSubscribe.CurrentSubscribeEndTime != "" {
-		expiryDate = subscription.CurrentSubscribe.CurrentSubscribeEndTime
-		// 尝试多种日期格式
-		formats := []string{"01/02/2006", "2006-01-02", "2006-01-02 15:04:05", time.RFC3339}
-		var expiryTime time.Time
-		for _, format := range formats {
-			expiryTime, _ = time.Parse(format, expiryDate)
-			if !expiryTime.IsZero() {
-				break
-			}
-		}
-		if !expiryTime.IsZero() {
-			expiryDays = int(math.Ceil(time.Until(expiryTime).Hours() / 24))
-			log.Printf("Expiry parsed: date=%s, days=%d", expiryDate, expiryDays)
-		} else {
-			log.Printf("Expiry parse failed for: %s", expiryDate)
-		}
-	}
-
-	// Parse primary model
-	var pageData PageData
-	if len(tokenPlan.ModelRemains) > 0 {
-		m := tokenPlan.ModelRemains[0]
-
-		pageData.ModelName = m.ModelName
-		startLocal := time.Unix(m.StartTime/1000, 0).In(time.FixedZone("CST", 8*3600))
-		endLocal := time.Unix(m.EndTime/1000, 0).In(time.FixedZone("CST", 8*3600))
+		startLocal := time.Unix(primary.StartTime/1000, 0).In(time.FixedZone("CST", 8*3600))
+		endLocal := time.Unix(primary.EndTime/1000, 0).In(time.FixedZone("CST", 8*3600))
 		pageData.TimeWindow = fmt.Sprintf("%02d:00-%02d:00 (UTC+8)",
 			startLocal.Hour(), endLocal.Hour())
-		pageData.ResetTime = formatRemainTime(m.RemainsTime)
+		pageData.ResetTime = formatRemainTime(primary.RemainsTime)
 
-		used := m.CurrentIntervalUsageCount
-		total := m.CurrentIntervalTotalCount
-		pageData.UsagePercent = 0
-		if total > 0 {
-			pageData.UsagePercent = int(math.Round(float64(used) / float64(total) * 100))
-		}
-		pageData.UsedCount = used
-		pageData.TotalCount = total
+		pageData.IntervalUsedPercent = usedPercent(primary.CurrentIntervalRemainingPercent)
+		pageData.IntervalRemainingText = fmt.Sprintf("剩余 %d%%", primary.CurrentIntervalRemainingPercent)
 
-		if m.CurrentWeeklyTotalCount == 0 {
-			pageData.WeeklyLimit = "不受限制"
-		} else {
-			pageData.WeeklyLimit = fmt.Sprintf("%d/%d", m.CurrentWeeklyUsageCount, m.CurrentWeeklyTotalCount)
-		}
-
-		pageData.ExpiryDate = expiryDate
-		pageData.ExpiryDays = expiryDays
-	}
-
-	// Token stats
-	pageData.Stats = TokenStats{
-		LastDay:  formatNumber(stats.LastDay),
-		Weekly:   formatNumber(stats.Weekly),
-		Monthly:  formatNumber(stats.Monthly),
-	}
-
-	// All models
-	for _, m := range tokenPlan.ModelRemains {
-		total := m.CurrentIntervalTotalCount
-		used := m.CurrentIntervalUsageCount
-		percent := 0
-		if total > 0 {
-			percent = int(math.Round(float64(used) / float64(total) * 100))
-		}
-		pageData.Models = append(pageData.Models, ModelData{
-			Name:      m.ModelName,
-			Percent:   percent,
-			Used:      used,
-			Total:     total,
-			Unlimited: m.CurrentWeeklyTotalCount == 0,
-		})
+		pageData.WeeklyUsedPercent = usedPercent(primary.CurrentWeeklyRemainingPercent)
+		pageData.WeeklyRemainingText = fmt.Sprintf("剩余 %d%%", primary.CurrentWeeklyRemainingPercent)
+		pageData.WeeklyResetText = formatRemainTime(primary.WeeklyRemainsTime)
+	} else {
+		pageData.Error = "API 未返回模型额度信息"
 	}
 
 	pageData.Status = StatusInfo{

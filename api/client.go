@@ -18,41 +18,31 @@ type Client struct {
 	HTTP   *http.Client
 }
 
+// ModelRemain 字段名直接对齐官方接口返回的 snake_case
+// 当前接口不再返回 total/usage 实际数值（恒为 0），
+// 新的数据源是 remaining_percent / status / boost_permille
 type ModelRemain struct {
-	ModelName                    string  `json:"model_name"`
-	StartTime                    int64   `json:"start_time"`
-	EndTime                      int64   `json:"end_time"`
-	RemainsTime                  int64   `json:"remains_time"`
-	CurrentIntervalUsageCount    int     `json:"current_interval_usage_count"`
-	CurrentIntervalTotalCount    int     `json:"current_interval_total_count"`
-	CurrentWeeklyUsageCount      int     `json:"current_weekly_usage_count"`
-	CurrentWeeklyTotalCount      int     `json:"current_weekly_total_count"`
-	WeeklyRemainsTime            int64   `json:"weekly_remains_time"`
+	StartTime                       int64  `json:"start_time"`
+	EndTime                         int64  `json:"end_time"`
+	RemainsTime                     int64  `json:"remains_time"`
+	CurrentIntervalTotalCount       int    `json:"current_interval_total_count"`
+	CurrentIntervalUsageCount       int    `json:"current_interval_usage_count"`
+	CurrentIntervalRemainingPercent int    `json:"current_interval_remaining_percent"`
+	CurrentIntervalStatus           int    `json:"current_interval_status"`
+	ModelName                       string `json:"model_name"`
+	CurrentWeeklyTotalCount         int    `json:"current_weekly_total_count"`
+	CurrentWeeklyUsageCount         int    `json:"current_weekly_usage_count"`
+	CurrentWeeklyRemainingPercent   int    `json:"current_weekly_remaining_percent"`
+	CurrentWeeklyStatus             int    `json:"current_weekly_status"`
+	WeeklyStartTime                 int64  `json:"weekly_start_time"`
+	WeeklyEndTime                   int64  `json:"weekly_end_time"`
+	WeeklyRemainsTime               int64  `json:"weekly_remains_time"`
+	IntervalBoostPermille           int    `json:"interval_boost_permille"`
+	WeeklyBoostPermille             int    `json:"weekly_boost_permille"`
 }
 
 type TokenPlanResponse struct {
 	ModelRemains []ModelRemain `json:"model_remains"`
-}
-
-type BillingRecord struct {
-	ConsumeToken int   `json:"consume_token"`
-	CreatedAt    int64 `json:"created_at"`
-}
-
-type BillingResponse struct {
-	ChargeRecords []BillingRecord `json:"charge_records"`
-}
-
-type UsageStats struct {
-	LastDay   int64
-	Weekly    int64
-	Monthly   int64
-}
-
-type SubscriptionDetails struct {
-	CurrentSubscribe struct {
-		CurrentSubscribeEndTime string `json:"current_subscribe_end_time"`
-	} `json:"current_subscribe"`
 }
 
 func NewClient(cfg Config) *Client {
@@ -72,6 +62,7 @@ func (c *Client) GetTokenPlan() (*TokenPlanResponse, error) {
 	}
 	req.Header.Set("Authorization", "Bearer "+c.Config.APIKey)
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
@@ -91,135 +82,6 @@ func (c *Client) GetTokenPlan() (*TokenPlanResponse, error) {
 		return nil, fmt.Errorf("failed to parse response: %w", err)
 	}
 	return &result, nil
-}
-
-func (c *Client) GetBillingRecords(page, limit int) (*BillingResponse, error) {
-	url := c.Config.APIURL + "/account/amount"
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.Config.APIKey)
-	q := req.URL.Query()
-	q.Add("page", fmt.Sprintf("%d", page))
-	q.Add("limit", fmt.Sprintf("%d", limit))
-	q.Add("aggregate", "false")
-	req.URL.RawQuery = q.Encode()
-
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	var result BillingResponse
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-	return &result, nil
-}
-
-func (c *Client) GetAllBillingRecords() ([]BillingRecord, error) {
-	var allRecords []BillingRecord
-	for page := 1; page <= 100; page++ {
-		resp, err := c.GetBillingRecords(page, 100)
-		if err != nil {
-			break
-		}
-		records := resp.ChargeRecords
-		if len(records) == 0 {
-			break
-		}
-		allRecords = append(allRecords, records...)
-		if len(records) < 100 {
-			break
-		}
-	}
-	return allRecords, nil
-}
-
-func (c *Client) GetAllBillingRecordsRaw() (interface{}, error) {
-	url := c.Config.APIURL + "/account/amount"
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.Config.APIKey)
-	q := req.URL.Query()
-	q.Add("page", "1")
-	q.Add("limit", "100")
-	q.Add("aggregate", "false")
-	req.URL.RawQuery = q.Encode()
-
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	var result interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-	return result, nil
-}
-
-func (c *Client) GetSubscriptionDetails() (*SubscriptionDetails, error) {
-	url := c.Config.APIURL + "/v1/api/openplatform/charge/combo/cycle_audio_resource_package"
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.Config.APIKey)
-	q := req.URL.Query()
-	q.Add("biz_line", "2")
-	q.Add("cycle_type", "1")
-	q.Add("resource_package_type", "7")
-	req.URL.RawQuery = q.Encode()
-
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	var result SubscriptionDetails
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
-	}
-	return &result, nil
-}
-
-func (c *Client) CalculateUsageStats(records []BillingRecord, since time.Time) UsageStats {
-	stats := UsageStats{}
-	monthStart := time.Date(since.Year(), since.Month(), 1, 0, 0, 0, 0, since.Location())
-	yesterdayStart := time.Now().AddDate(0, 0, -1).Truncate(24 * time.Hour)
-	weekStart := time.Now().AddDate(0, 0, -7)
-
-	for _, r := range records {
-		t := time.Unix(r.CreatedAt, 0)
-		if t.Before(since) {
-			continue
-		}
-		if t.After(yesterdayStart) && t.Before(yesterdayStart.Add(24*time.Hour)) {
-			stats.LastDay += int64(r.ConsumeToken)
-		}
-		if t.After(weekStart) {
-			stats.Weekly += int64(r.ConsumeToken)
-		}
-		if t.After(monthStart) {
-			stats.Monthly += int64(r.ConsumeToken)
-		}
-	}
-	return stats
 }
 
 func getEnv(key, fallback string) string {
